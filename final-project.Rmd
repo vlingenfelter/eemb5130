@@ -1,5 +1,5 @@
 ---
-title: "EEMB Final Project"
+title: "Species distribution download"
 author: "Violet Lingenfelter"
 date: "3/28/2020"
 output: html_document
@@ -10,14 +10,18 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # include library for getting species distribution data from GBIF
 library(rgbif)
+# include biomod2 for species distribution models
+# library(biomod2)
 ```
 
 # Data 
 
+Network data was downloaded from the Web of Life. 
+
 ```{r}
 # load the plant pollinator network from web of life download
 # this is M_PL-016 from Spain, downloaded on 3/26/2020
-network <- read.csv("./web-of-life/M_PL_016.csv")
+network <- read.csv("./web-of-life/M_PL_025.csv")
 # then use that to get distributions of each plant species
 # then use SRE in Biomod2 to make absence presence maps
 ```
@@ -28,39 +32,74 @@ species <- data.frame("species" = network$X)
 
 # get the GBIF id for each species that has one
 for (i in 1:length(species$species)) {
+  # get a list of keys from GBIF
   key <- name_suggest(q=species[i, "species"], rank="species")
   if (length(key) > 0) {
-    species[i, "gbif_key"] <- key[1,1]
+    species[i, "gbif_key"] <- key[1,1] # take the first key if there is one and add it to the dataframe
   }
 }
+
+# save this information to a csv for access later
+write.csv(species, './species.csv')
 ```
 
 ```{r}
 # function to get occurances data one species (locations)
 # takes in a GBIF taxon key
 # outputs a data frame of latitude + longitudes of occurances
+# IF the NROWs does not match the OUTPUT that is because the dataset had OUTPUT many entries but only NROW many with latitude longitude information
 get_occurrences <- function(key) {
-  first <- occ_search(taxonKey = key, fields = c('name','decimalLatitude','decimalLongitude'))
-  data <- first$data
-  print(first$meta)
-  endOfRecords <- first$meta$endOfRecords
-  offset <- NROW(first$data)
-
-  while (!endOfRecords) {
-    nextQuery <- occ_search(taxonKey = key, start = offset, fields = c('name','decimalLatitude','decimalLongitude'))
-    endOfRecords <- nextQuery$meta$endOfRecords
-    print(NROW(nextQuery$data))
-    offset <- offset + NROW(nextQuery$data)
-    data <- rbind(data, nextQuery$data)
+  # check to see if there is a GBIF key. 
+  if (is.na(key)) {
+    return('no gbif key')
+  } else {
+    print('it has a key, getting results...')
+    total <- occ_count(taxonKey = key)
+    print(total)
+     # get the first occurrence query of this dataset
+    first <- occ_search(taxonKey = key, fields = c('name','decimalLatitude','decimalLongitude'))
+    data <- first$data # begin storing the data
+    print(data)
+    endOfRecords <- first$meta$endOfRecords # is this the end of records?
+    offset <- first$meta$offset # keep track of offset 
+    print(offset)
+    print(round(offset/total, digits = 4) * 100)
+    
+    # until you've reached the end of the records, keep querying GBIF for that species
+    if (!endOfRecords) {
+        while (!endOfRecords && (offset < 195500) ) {
+          nextQuery <- occ_search(taxonKey = key, start = offset, fields = c('name','decimalLatitude','decimalLongitude'))
+          endOfRecords <- nextQuery$meta$endOfRecords
+          offset <- nextQuery$meta$offset 
+          print(offset)
+          print(round(offset/total, digits = 4) * 100)
+          data <- rbind(data, nextQuery$data)
+        }
+    }
+    
+    return(data) 
   }
-
-  return(data)
 }
 
-get_occurrences(species[25,2])
-test <- occ_search(taxonKey = species[25,2], fields=c('name','decimalLatitude','decimalLongitude'))
-species[25,2]
+make_occurrence_csv <- function(key, species) {
+  data <- get_occurrences(key)
+  title_string <- paste("./species_distributions_us/", paste(key, sub(" ", "_", species), sep="_"), ".csv", sep="")
+  if (NROW(data) > 0) {
+    write.csv(data, title_string)
+  }
+  return(data)
+}
 ```
+
+```{r}
+for (i in 1:NROW(species)) {
+  print(species[i,1])
+  make_occurrence_csv(species[i,2], species[i,1])
+}
+```
+```{r}
+```
+
 
 
 

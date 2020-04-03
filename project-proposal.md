@@ -18,6 +18,10 @@ Then I will create my species distributions dataset, following the work done by 
 
 I will simulate plant species extinction by linking it to the probability of occurrence given current and future climate at its network location. I will end up with a likelihood of extinction for each plant species for each timestep for each downscaling technique. I will also measure network connectance, and simulate co-extinction of pollinators. My final dataset will be the connectance of the network, the number of extinct species, and the number of co-extinguished species at each timestamp for each downscaling method, which I will compare statistically.
 
+### Update (4/3/2020)
+
+I will be using the M_PL_025 plant pollinator network from the Web of Life Database. This decision was made to ensure getting enough species distributions to run my models.
+
 ## Expected Results and Implications
 
 I expect to find significant differences in ecological results between the two downscaling methods. Previous studies have shown that different downscaling methods applied to the same global climate model can introduce as much variation in individual species distribution model results as using entirely different global climate models [8]. It would logically follow that we can expect significant variation in predictions for networks as well.

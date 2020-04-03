@@ -1,0 +1,66 @@
+---
+title: "EEMB Final Project"
+author: "Violet Lingenfelter"
+date: "3/28/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# include library for getting species distribution data from GBIF
+library(rgbif)
+```
+
+# Data 
+
+```{r}
+# load the plant pollinator network from web of life download
+# this is M_PL-016 from Spain, downloaded on 3/26/2020
+network <- read.csv("./web-of-life/M_PL_016.csv")
+# then use that to get distributions of each plant species
+# then use SRE in Biomod2 to make absence presence maps
+```
+
+```{r}
+# make a data frame that will serve as a look up table for species distributions
+species <- data.frame("species" = network$X)
+
+# get the GBIF id for each species that has one
+for (i in 1:length(species$species)) {
+  key <- name_suggest(q=species[i, "species"], rank="species")
+  if (length(key) > 0) {
+    species[i, "gbif_key"] <- key[1,1]
+  }
+}
+```
+
+```{r}
+# function to get occurances data one species (locations)
+# takes in a GBIF taxon key
+# outputs a data frame of latitude + longitudes of occurances
+get_occurrences <- function(key) {
+  first <- occ_search(taxonKey = key, fields = c('name','decimalLatitude','decimalLongitude'))
+  data <- first$data
+  print(first$meta)
+  endOfRecords <- first$meta$endOfRecords
+  offset <- NROW(first$data)
+
+  while (!endOfRecords) {
+    nextQuery <- occ_search(taxonKey = key, start = offset, fields = c('name','decimalLatitude','decimalLongitude'))
+    endOfRecords <- nextQuery$meta$endOfRecords
+    print(NROW(nextQuery$data))
+    offset <- offset + NROW(nextQuery$data)
+    data <- rbind(data, nextQuery$data)
+  }
+
+  return(data)
+}
+
+get_occurrences(species[25,2])
+test <- occ_search(taxonKey = species[25,2], fields=c('name','decimalLatitude','decimalLongitude'))
+species[25,2]
+```
+
+
+

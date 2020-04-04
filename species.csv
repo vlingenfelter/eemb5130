@@ -1,14 +1,14 @@
-"","species","gbif_key"
-"1","Claytonia virginica",3084745
-"2","Erythronium umbilicatum",2752903
-"3","Stellaria pubera",5384664
-"4","Thalictrum thalictroides",3033114
-"5","Cardamine angustata",3045786
-"6","Hepatica americana",6374864
-"7","Sanguinaria canadensis",5334192
-"8","Tiarella cordifolia",5371610
-"9","Aesculus sylvatica",3189816
-"10","Viola papilionacea",5331250
-"11","Uvularia sessilifolia",2740314
-"12","Podophyllum peltatum",3033839
-"13","Trillium catesbaei",2742183
+"","species","gbif_key","csv_path"
+"1","Claytonia virginica",3084745,"./species_distributions_us/3084745_Claytonia_virginica.csv"
+"2","Erythronium umbilicatum",2752903,"./species_distributions_us/2752903_Erythronium_umbilicatum.csv"
+"3","Stellaria pubera",5384664,"./species_distributions_us/5384664_Stellaria_pubera.csv"
+"4","Thalictrum thalictroides",3033114,"./species_distributions_us/3033114_Thalictrum_thalictroides.csv"
+"5","Cardamine angustata",3045786,"./species_distributions_us/3045786_Cardamine_angustata.csv"
+"6","Hepatica americana",6374864,"./species_distributions_us/6374864_Hepatica_americana.csv"
+"7","Sanguinaria canadensis",5334192,"./species_distributions_us/5334192_Sanguinaria_canadensis.csv"
+"8","Tiarella cordifolia",5371610,"./species_distributions_us/5371610_Tiarella_cordifolia.csv"
+"9","Aesculus sylvatica",3189816,"./species_distributions_us/3189816_Aesculus_sylvatica.csv"
+"10","Viola papilionacea",5331250,"./species_distributions_us/5331250_Viola_papilionacea.csv"
+"11","Uvularia sessilifolia",2740314,"./species_distributions_us/2740314_Uvularia_sessilifolia.csv"
+"12","Podophyllum peltatum",3033839,"./species_distributions_us/3033839_Podophyllum_peltatum.csv"
+"13","Trillium catesbaei",2742183,"./species_distributions_us/2742183_Trillium_catesbaei.csv"

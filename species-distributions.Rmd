@@ -8,10 +8,8 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-# include library for getting species distribution data from GBIF
-library(rgbif)
-# include biomod2 for species distribution models
-# library(biomod2)
+library(rgbif) # include library for getting species distribution data from GBIF
+library(biomod2) # include biomod2 for species distribution models
 ```
 
 # Data 
@@ -22,6 +20,7 @@ Network data was downloaded from the Web of Life.
 # load the plant pollinator network from web of life download
 # this is M_PL-016 from Spain, downloaded on 3/26/2020
 network <- read.csv("./web-of-life/M_PL_025.csv")
+species <- read.csv("species.csv")
 # then use that to get distributions of each plant species
 # then use SRE in Biomod2 to make absence presence maps
 ```
@@ -37,6 +36,11 @@ for (i in 1:length(species$species)) {
   if (length(key) > 0) {
     species[i, "gbif_key"] <- key[1,1] # take the first key if there is one and add it to the dataframe
   }
+}
+
+for (i in 1:length(species$species)) {
+  title_string <- paste("./species_distributions_us/", paste(species[i, 2], sub(" ", "_", species[i,1]), sep="_"), ".csv", sep="")
+  species[i, "csv_path"] <- title_string
 }
 
 # save this information to a csv for access later
@@ -98,6 +102,14 @@ for (i in 1:NROW(species)) {
 }
 ```
 ```{r}
+distributions <- c() # empty vector to hold the distributions
+
+for (i in 1:NROW(species)) {
+  path <- toString(species$csv_path[i])
+  distributions[[i]] <- read.csv(file = path)
+}
+
+names(distributions) <- lapply(species$species, function(y) {gsub(" ", "_", y)})
 ```
 
 

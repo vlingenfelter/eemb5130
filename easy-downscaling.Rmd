@@ -21,6 +21,8 @@ library(gstat)
 theme_set(
   theme_void()
 )
+
+setwd('/Users/vlingenfelter5/Documents/ecological-dynamics/final-project')
 ```
 
 ```{r}
@@ -46,5 +48,10 @@ for (i in 1:(length(ts_data)/12)) {
   coldest_cold[i] <- overlay(subset[[1]], subset[[2]], subset[[3]], subset[[4]], subset[[6]], subset[[7]], subset[[8]], subset[[9]], subset[[10]], subset[[11]], subset[[12]], fun = min)
 }
 
+setwd("./climate-data/easy_downscaling/")
 
+for (i in 1:length(coldest_cold)) {
+  writeRaster(coldest_cold[[i]], paste("coldest_cold", toString(i+2014), sep="_"), format="CDF")
+  writeRaster(warmest_warm[[i]], paste("warmest_warm", toString(i+2014), sep="_"), format="CDF")
+}
 ```

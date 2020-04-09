@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 library(rgbif) # include library for getting species distribution data from GBIF
+library(raster) # include library for reading raster files
 library(biomod2) # include biomod2 for species distribution models
 ```
 
@@ -16,7 +17,7 @@ library(biomod2) # include biomod2 for species distribution models
 
 Network data was downloaded from the Web of Life. 
 
-```{r}
+```{r downloadData}
 # load the plant pollinator network from web of life download
 # this is M_PL-016 from Spain, downloaded on 3/26/2020
 network <- read.csv("./web-of-life/M_PL_025.csv")
@@ -25,30 +26,28 @@ species <- read.csv("species.csv")
 # then use SRE in Biomod2 to make absence presence maps
 ```
 
-```{r}
-# make a data frame that will serve as a look up table for species distributions
-species <- data.frame("species" = network$X)
+```{r makeData}
+# # make a data frame that will serve as a look up table for species distributions
+# species <- data.frame("species" = network$X)
+# 
+# # get the GBIF id for each species that has one
+# for (i in 1:length(species$species)) {
+#   # get a list of keys from GBIF
+#   key <- name_suggest(q=species[i, "species"], rank="species")
+#   if (length(key) > 0) {
+#     species[i, "gbif_key"] <- key[1,1] # take the first key if there is one and add it to the dataframe
+#   }
+# }
+# 
+# for (i in 1:length(species$species)) {
+#   title_string <- paste("./species_distributions_us/", paste(species[i, 2], sub(" ", "_", species[i,1]), sep="_"), ".csv", sep="")
+#   species[i, "csv_path"] <- title_string
+# }
+# 
+# # save this information to a csv for access later
+# write.csv(species, './species.csv')
 
-# get the GBIF id for each species that has one
-for (i in 1:length(species$species)) {
-  # get a list of keys from GBIF
-  key <- name_suggest(q=species[i, "species"], rank="species")
-  if (length(key) > 0) {
-    species[i, "gbif_key"] <- key[1,1] # take the first key if there is one and add it to the dataframe
-  }
-}
-
-for (i in 1:length(species$species)) {
-  title_string <- paste("./species_distributions_us/", paste(species[i, 2], sub(" ", "_", species[i,1]), sep="_"), ".csv", sep="")
-  species[i, "csv_path"] <- title_string
-}
-
-# save this information to a csv for access later
-write.csv(species, './species.csv')
-```
-
-```{r}
-# function to get occurances data one species (locations)
+# function to get occurrences data one species (locations)
 # takes in a GBIF taxon key
 # outputs a data frame of latitude + longitudes of occurances
 # IF the NROWs does not match the OUTPUT that is because the dataset had OUTPUT many entries but only NROW many with latitude longitude information
@@ -93,22 +92,27 @@ make_occurrence_csv <- function(key, species) {
   }
   return(data)
 }
+
+# uncomment and run this code if to make new species list
+
+# for (i in 1:NROW(species)) {
+#   print(species[i,1])
+#   make_occurrence_csv(species[i,2], species[i,1])
+# }
 ```
 
-```{r}
-for (i in 1:NROW(species)) {
-  print(species[i,1])
-  make_occurrence_csv(species[i,2], species[i,1])
-}
-```
 ```{r}
 distributions <- c() # empty vector to hold the distributions
 
 for (i in 1:NROW(species)) {
-  path <- toString(species$csv_path[i])
-  distributions[[i]] <- read.csv(file = path)
+  path <- toString(species$csv_path[i]) # get the download path
+  df <- read.csv(file = path) # read the file
+  df["X"] <- NULL # remove the extra column (just the row number)
+  df <- unique(df) # keep only unique data points
+  distributions[[i]] <- df # add this to the list
 }
 
+# add names to the list (species names with spaces replaced by underscores)
 names(distributions) <- lapply(species$species, function(y) {gsub(" ", "_", y)})
 ```
 

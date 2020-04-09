@@ -1,0 +1,50 @@
+---
+title: "easy-downscaling"
+author: "Violet Lingenfelter"
+date: "4/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rgbif) # include library for getting species distribution data from GBIF
+library(ggplot2) # include library for making maps
+library(raster) # include library for reading raster files
+library(dplyr)
+require(maps)
+require(viridis)
+library(ncdf4) # package for netcdf manipulation
+library(rgdal) # package for geospatial analysis
+library(gstat)
+
+theme_set(
+  theme_void()
+)
+```
+
+```{r}
+ts_files <- list.files('/Volumes/OBESE/SDS Research/ts/')
+
+ts_data <- list()
+
+for (i in 1:length(ts_files)) {
+  print(ts_files[i]) # print name of file
+  temp <- raster(paste("/Volumes/OBESE/SDS Research/ts/", ts_files[[i]], sep="")) # get data from folder on hard drive
+  temp <- rotate(temp) # change raster to normal degree scheme 
+  temp <- crop(temp, c(-180,0,0,90)) # crop to the western northern hemispheres
+  ts_data[[i]] <- disaggregate(temp, fact=8) # this is the simplest case of downscaling (raster disaggregation) to the 10 arcmin resolution (1/8 of a degree)
+}
+
+coldest_cold <- list()
+warmest_warm <- list()
+
+for (i in 1:(length(ts_data)/12)) {
+  print(2014+i)
+  subset <- ts_data[(((i-1)*12)+1):(i*12)]
+  warmest_warm[i] <- overlay(subset[[1]], subset[[2]], subset[[3]], subset[[4]], subset[[6]], subset[[7]], subset[[8]], subset[[9]], subset[[10]], subset[[11]], subset[[12]], fun = max)
+  coldest_cold[i] <- overlay(subset[[1]], subset[[2]], subset[[3]], subset[[4]], subset[[6]], subset[[7]], subset[[8]], subset[[9]], subset[[10]], subset[[11]], subset[[12]], fun = min)
+}
+
+
+```

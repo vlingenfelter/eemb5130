@@ -4,6 +4,7 @@ author: "Violet Lingenfelter"
 date: "4/8/2020"
 output: html_document
 ---
+# Downscaling Climate Data Using Very Primitive Interpolation 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -22,11 +23,15 @@ theme_set(
   theme_void()
 )
 
-setwd('/Users/vlingenfelter5/Documents/ecological-dynamics/final-project')
+setwd('/Users/vlingenfelter5/Documents/ecological-dynamics/final-project/')
 ```
 
+# Temperature data
+
+For each year we need a raster where each cell has the warmest value predicted for that year (the max value of all months) and the coolest value predicted for that year (the minimum value for that month). 
+
 ```{r}
-ts_files <- list.files('/Volumes/OBESE/SDS Research/ts/')
+ts_files <- list.files('/Volumes/OBESE/SDS Research/ts/') # get all of the surface temperature files that I have downloaded to an external drive
 
 ts_data <- list()
 
@@ -38,9 +43,10 @@ for (i in 1:length(ts_files)) {
   ts_data[[i]] <- disaggregate(temp, fact=8) # this is the simplest case of downscaling (raster disaggregation) to the 10 arcmin resolution (1/8 of a degree)
 }
 
-coldest_cold <- list()
-warmest_warm <- list()
+coldest_cold <- list() # empty list to hold the coldest cold data for each year
+warmest_warm <- list() # empty list to hold the warmest warm data for each year
 
+# for every year, get the rasters from that year, then calculate the max value and min value for each cell
 for (i in 1:(length(ts_data)/12)) {
   print(2014+i)
   subset <- ts_data[(((i-1)*12)+1):(i*12)]
@@ -48,10 +54,44 @@ for (i in 1:(length(ts_data)/12)) {
   coldest_cold[i] <- overlay(subset[[1]], subset[[2]], subset[[3]], subset[[4]], subset[[6]], subset[[7]], subset[[8]], subset[[9]], subset[[10]], subset[[11]], subset[[12]], fun = min)
 }
 
-setwd("./climate-data/easy_downscaling/")
-
+# write these raster files to disk
 for (i in 1:length(coldest_cold)) {
   writeRaster(coldest_cold[[i]], paste("coldest_cold", toString(i+2014), sep="_"), format="CDF")
   writeRaster(warmest_warm[[i]], paste("warmest_warm", toString(i+2014), sep="_"), format="CDF")
+}
+```
+
+# Precipitation data
+
+For each year we need a raster where each cell has the wettest value predicted for that year (the max value of all months) and the driest value predicted for that year (the minimum value for that month). 
+
+```{r}
+pr_files <- list.files('/Volumes/OBESE/SDS Research/pr/') # get all of the precipitation flux files that I have downloaded to an external drive
+
+pr_data <- list() # intialize empty list to store data
+
+for (i in 1:length(pr_files)) {
+  print(pr_files[i]) # print name of file
+  temp <- raster(paste("/Volumes/OBESE/SDS Research/ts/", ts_files[[i]], sep="")) # get data from folder on hard drive
+  temp <- rotate(temp) # change raster to normal degree scheme 
+  temp <- crop(temp, c(-180,0,0,90)) # crop to the western northern hemispheres
+  pr_data[[i]] <- disaggregate(temp, fact=8) # this is the simplest case of downscaling (raster disaggregation) to the 10 arcmin resolution (1/8 of a degree)
+}
+
+driest_dry <- list() # empty list for minimum values
+wettest_wet <- list() # empty list for maximum values
+
+# for each year, select all rasters and then find the maximum and minimum cell values
+for (i in 1:(length(pr_data)/12)) {
+  print(2014+i)
+  subset <- pr_data[(((i-1)*12)+1):(i*12)]
+  wettest_wet[i] <- overlay(subset[[1]], subset[[2]], subset[[3]], subset[[4]], subset[[6]], subset[[7]], subset[[8]], subset[[9]], subset[[10]], subset[[11]], subset[[12]], fun = max)
+  driest_dry[i] <- overlay(subset[[1]], subset[[2]], subset[[3]], subset[[4]], subset[[6]], subset[[7]], subset[[8]], subset[[9]], subset[[10]], subset[[11]], subset[[12]], fun = min)
+}
+
+# write these rasters as files to the hard drive
+for (i in 1:length(wettest_wet)) {
+  writeRaster(wettest_wet[[i]], paste("wettest_wet", toString(i+2014), sep="_"), format="CDF")
+  writeRaster(driest_dry[[i]], paste("driest_dry", toString(i+2014), sep="_"), format="CDF")
 }
 ```

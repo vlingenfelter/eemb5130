@@ -1,0 +1,49 @@
+---
+title: "Extinction model"
+author: "Violet Lingenfelter"
+date: "4/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(raster) # include library for reading raster files
+library(plotKML)
+```
+
+```{r}
+# get data
+network <- read.csv("./web-of-life/M_PL_025.csv")
+species <- read.csv("species.csv")
+
+distributions <- vector(mode = "list", length = NROW(species)) # empty vector to hold the distributions
+rasters <- vector(mode = "list", length = NROW(species))
+
+for (i in 1:NROW(species)) {
+  path <- toString(species$csv_path[i]) # get the download path
+  df <- read.csv(file = path) # read the file
+  df["X"] <- NULL # remove the extra column (just the row number)
+  df <- unique(df) # keep only unique data points
+  df <- cbind(df, "count" = 1)
+  coordinates(df) <- cbind(df$decimalLongitude, df$decimalLatitude)
+  proj4string(df) = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+  
+  r <- raster()
+  nrow(r) <- nrow(r)*8
+  ncol(r) <- ncol(r)*8
+  r <- rasterize(df, r, field="count", background=0)
+  r <-  crop(r, c(-180,0,0,90))
+  
+  plot(r)
+  
+  distributions[[i]] <- df # add this to the list
+  rasters[[i]] <- r
+}
+
+# add names to the list (species names with spaces replaced by underscores)
+names(distributions) <- lapply(species$species, function(y) {gsub(" ", "_", y)})
+names(rasters) <- lapply(species$species, function(y) {gsub(" ", "_", y)})
+
+```
+
+

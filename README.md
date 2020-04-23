@@ -4,7 +4,7 @@ This is the work for my final project in Ecological Dynamics (Spring 2020). My w
 
 ## Software information
 
-This project was completed with R 3.6.3 (MacOS), using `rgbif` to collect species distribution data and `biomod2` for species distribution modeling. 
+This project was completed with R 3.6.3 (MacOS), using `rgbif` to collect species distribution data and `biomod2` for species distribution modeling. SDSM downscaling was done with [SDSM v 5.3](https://sdsm.org.uk/software.html).
 
 ## Data 
 

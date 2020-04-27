@@ -1,0 +1,13 @@
+# Ignore model files that are auto-generated
+# these are all the models for the species
+Aesculus.sylvatica/*
+Claytona.virginica/*
+Erythronium.umbilicatum/*
+<<<<<<< HEAD
+Trillium.catesbaei/*
+
+# Ignore climate data 
+climate-data/*
+=======
+Trillium.catesbaei/*
+>>>>>>> 0b7b12f... update to submitted project

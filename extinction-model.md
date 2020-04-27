@@ -1,0 +1,341 @@
+Final Project
+=============
+
+Background and Project Goals
+----------------------------
+
+Climate data on a small scale, both temporally and geographically, is essential as an input to many ecological models. Predicitions have been shown to be effective in estimating ecological extinction as a result of climate change \[1\]. Extinction of one species in a network can weaken the ecological network it belongs to, making te entire network more vulnerable to future climate change impacts and perturbations. Climate envelope model are a common apporach to simulating future species distributions, and they usually rely on climate data at a fine resolution.
+
+In order for climate data to be on a scale small enough for these models, it must be downscaled. Different downscaling methods have been shown to introduce uncertainty in both ecological and hydrological models \[8, 24, 25\], but the impact of downscaling methods on network extinction predicitions remains untested. For this project, I will run the same network extinction models and simulations, and vary the downscaling method used on the input climate data.
+
+Computational Methods
+---------------------
+
+This project closely follows the methodology laid out by Bascompte Lab's prior work \[4\]. The plant pollinator I chose for this project is M\_PL\_025 plant pollinator network from the Web of Life Database \[5\]. This network was chosen because there were species distributions for each plant in the network, and because it is relatively small. Species distributions were collected from GBIF \[9-21\].
+
+Because this data is presence only, I created pseudo-absence data using an SRE model for each species \[23\]. I use the consensus method \[6,7\] with four distribution models from biomod2: generalized linear model, generalized boosting model, artificial neural network, and random forest. I will run 10 repetitions of each model. I will then project each species’ occurrence probabilities under current and future climate scenarios.
+
+This project was completed with R 3.6.3 on MacOS, using `rgbif` to collect species distribution data and `biomod2` for species distribution modeling. SDSM downscaling \[2\] was done with SDSM v 5.3. The BCSD downscaling method \[3\] was intended to be my other choice for comparison, but that proved not feasible given my time and computation constraints. I chose instead to perform a very primitive downscaling method using the `raster` package `dissagregate` function on raw climate data. To reference the code used for simple downscaling and species data downloads, see [the github repo](https://github.com/vlingenfelter/eemb5130).
+
+Get species distribution vector data
+------------------------------------
+
+This network was taken from the Web of Life database. All of the species distributions were gotten from GBIF.
+
+``` r
+# get data
+network <- read.csv("./web-of-life/M_PL_025.csv") # the network data
+species <- read.csv("species.csv") # list of species names and associated hashes
+distributions <- vector(mode = "list", length = NROW(species)) # empty vector to hold the distributions
+
+# make each species csv into a SpatialPoints DataFrame
+for (i in 1:NROW(species)) {
+  path <- toString(species$csv_path[i]) # get the download path
+  df <- read.csv(file = path) # read the file
+  df["X"] <- NULL # remove the extra column (just the row number)
+  df <- unique(df) # keep only unique data points
+  df <- cbind(df, "count" = 1) # add a count value, this is for rasterizing
+  coordinates(df) <- cbind(df$decimalLongitude, df$decimalLatitude) # convert to a spatialpoints dataframe
+  proj4string(df) = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0") # assign a coordinate system
+  
+  distributions[[i]] <- df # add this to the list
+}
+```
+
+#### Create absence presence data
+
+``` r
+# this is a boundary file for the land in North America
+boundaries <- ne_countries(continent = 'north america')
+
+# create a stack of the climate data will be using for SRE models (to create absence presence dataset)
+explanatory <- 
+  raster::stack(
+    raster("./climate-data/easy_downscaling/wettest_wet_2015.nc"), 
+    raster("./climate-data/easy_downscaling/coldest_cold_2015.nc"), 
+    raster("./climate-data/easy_downscaling/warmest_warm_2015.nc"), 
+    raster("./climate-data/easy_downscaling/driest_dry_2015.nc")
+  )
+```
+
+    ## Loading required namespace: ncdf4
+
+``` r
+# empty list for SRE outputs
+sre_output <- vector(mode = "list", length = NROW(species))
+
+# model each absence/presence set with SRE 
+for (i in 1:NROW(species)) {
+  print(paste("modeling", species$species[i]))
+  myResp <- distributions[[i]]
+  myRespXY <- cbind(myResp$decimalLongitude, myResp$decimalLatitude)
+  
+  myResp <- 
+    raster::reclassify(
+      subset(explanatory, 1, drop = TRUE), c(-Inf, Inf, 0)
+    )
+  
+  myResp[cellFromXY(myResp,myRespXY)] <- 1
+  
+  sre.095 <- 
+    sre(
+      Response = myResp, 
+      Explanatory = explanatory, 
+      NewData=explanatory, 
+      Quant = 0.025
+    )
+  
+  sre.095 <-  mask(sre.095, boundaries) # bounding box for contiguous north america
+  sre_output[[i]] <- sre.095 # store in list
+}
+```
+
+    ## [1] "modeling Claytonia virginica"
+    ## [1] "modeling Erythronium umbilicatum"
+    ## [1] "modeling Stellaria pubera"
+    ## [1] "modeling Thalictrum thalictroides"
+    ## [1] "modeling Cardamine angustata"
+    ## [1] "modeling Hepatica americana"
+    ## [1] "modeling Sanguinaria canadensis"
+    ## [1] "modeling Tiarella cordifolia"
+    ## [1] "modeling Aesculus sylvatica"
+    ## [1] "modeling Viola papilionacea"
+    ## [1] "modeling Uvularia sessilifolia"
+    ## [1] "modeling Podophyllum peltatum"
+    ## [1] "modeling Trillium catesbaei"
+
+#### Set up the data for modeling
+
+``` r
+# create explanatory variable data set (stacks of rasters taken from .grd files, each with 35 bands for year)
+myExpl = stack( mask(raster("./climate-data/easy_downscaling/coldest.grd"), boundaries),
+                mask(raster("./climate-data/easy_downscaling/warmest.grd"), boundaries),
+                mask(raster("./climate-data/easy_downscaling/driest.grd"), boundaries),
+                mask(raster("./climate-data/easy_downscaling/wettest.grd"), boundaries)
+                )
+
+# empty list for Biomod verified data
+biomodData <- list()
+
+# loop through species and make biomod verified datasets
+for (i in 1:NROW(species)) {
+  r <- rasterToPoints(sre_output[[i]])
+
+  respName <- gsub(" ", "_", species$species[[i]])
+  myResp <- r[,"layer.1"]
+  myRespXY <- cbind(r[,"x"], r[,"y"])
+  
+  biomodData[[i]] <- BIOMOD_FormatingData(
+    resp.var = myResp,
+    expl.var = myExpl,
+    resp.xy = myRespXY,
+    resp.name = respName
+  )
+}
+```
+
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Claytonia_virginica Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Claytonia.virginica
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-= Erythronium_umbilicatum Data Formating -=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Erythronium.umbilicatum
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-=-= Stellaria_pubera Data Formating -=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Stellaria.pubera
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-= Thalictrum_thalictroides Data Formating -=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Thalictrum.thalictroides
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Cardamine_angustata Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Cardamine.angustata
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Hepatica_americana Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Hepatica.americana
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-= Sanguinaria_canadensis Data Formating -=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Sanguinaria.canadensis
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Tiarella_cordifolia Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Tiarella.cordifolia
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Aesculus_sylvatica Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Aesculus.sylvatica
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Viola_papilionacea Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Viola.papilionacea
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-= Uvularia_sessilifolia Data Formating -=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Uvularia.sessilifolia
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Podophyllum_peltatum Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Podophyllum.peltatum
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ## -=-=-=-=-=-=-=-=-=-=-= Trillium_catesbaei Data Formating -=-=-=-=-=-=-=-=-=-=-=
+    ## 
+    ##  Response variable name was converted into Trillium.catesbaei
+    ## > No pseudo absences selection !
+    ##       ! No data has been set aside for modeling evaluation
+    ## -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= Done -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+#### Envelope Models
+
+``` r
+myBiomodOption <- BIOMOD_ModelingOptions()
+
+for (i in 1:NROW(species)) {
+  myBiomodModelOut <-  BIOMOD_Modeling(
+    biomodData[[i]],
+    models = c('GBM', 'GLM', 'RF', 'ANN'),
+    models.options = myBiomodOption,
+    NbRunEval=10,
+    DataSplit=80,
+    Prevalence=0.5,
+    VarImport=3,
+    models.eval.meth = c('TSS','ROC'),
+    SaveObj = TRUE,
+    rescal.all.models = TRUE,
+    do.full.models = FALSE,
+    modeling.id = paste(gsub(" ", "", species$species[[i]]),"FirstModeling",sep=""))
+
+  myBiomodEM <- BIOMOD_EnsembleModeling(
+    modeling.output = myBiomodModelOut,
+    chosen.models = 'all',
+    em.by='all',
+    eval.metric = c('TSS'),
+    eval.metric.quality.threshold = c(0.7),
+    prob.mean = T,
+    prob.cv = T,
+    prob.ci = T,
+    prob.ci.alpha = 0.05,
+    prob.median = T,
+    committee.averaging = T,
+    prob.mean.weight = T,
+    prob.mean.weight.decay = 'proportional' )
+  
+  
+  myBiomodProj <- BIOMOD_Projection(
+      modeling.output = myBiomodModelOut,
+      new.env = myExpl,
+      proj.name = 'easy_downscaling',
+      selected.models = 'all',
+      binary.meth = 'TSS',
+      compress = 'xz',
+      clamping.mask = F,
+      output.format = '.grd')
+  
+  myBiomodEF <- BIOMOD_EnsembleForecasting(
+    EM.output = myBiomodEM,
+    projection.output = myBiomodProj)
+  
+  plot(BiomodEF)
+}
+```
+
+Results
+-------
+
+I did not complete this project to the point of having results. I got as far as downscaling the climate data, but running extinction models for each species is time consuming and computationally expensive. This has made debugging challenging, and personal circumstance has compounded this. This work will be completed over the summer. I expect to find significantly different results from using the two climate methods.
+
+Broader Impact (once completed)
+-------------------------------
+
+Without high resolution climate data, species distribution models are not feasible. Therefore downscaling climate data is an integral step in the climate envelope model process. Prior research has shown that different downscaling methods can have drastic effects on single species distribution models \[8\], but little work has been done to see how downscaling methods affect network extinction models. Once completed, this project will aid in efforts to quantify what amount of uncertainty downscaling methods add to network extinction models.
+
+### Bibliography
+
+\[1\] Maclean, I. M. D. & Wilson, R. J. Recent ecological responses to climate change support predictions of high extinction risk. Proc. Natl. Acad. Sci. 108 , 12337–12342 (2011).
+
+\[2\] Wilby, R. L., Dawson, C. W. & Barrow, E. M. sdsm — a decision support tool for the assessment of regional climate change impacts. Environ. Model. Softw. 17 , 145–157 (2002).
+
+\[3\] Wood, A. W., Leung, L. R., Sridhar, V. & Lettenmaier, D. P. Hydrologic Implications of Dynamical and Statistical Approaches to Downscaling Climate Model Outputs. Clim. Change 62 , 189–216 (2004).
+
+\[4\] Bascompte, J., García, M. B., Ortega, R., Rezende, E. L. & Pironon, S. Mutualistic interactions reshuffle the effects of climate change on plants across the tree of life. Sci. Adv. 5 , eaav2539 (2019).
+
+\[5\] Motten, A. F. 1982. Pollination Ecology of the Spring Wildflower Community in the Deciduous Forests of Piedmont North Carolina. Doctoral Dissertation thesis, Duke University, Duhram, North Carolina, USA; Motten, A. F. 1986. Pollination ecology of the spring wildflower community of a temperate deciduous forest. Ecological Monographs 56:21-42.
+
+\[6\] Araújo, M. B. & New, M. Ensemble forecasting of species distributions. Trends Ecol. Evol. 22, 42–47 (2007).
+
+\[7\] Marmion, M., Parviainen, M., Luoto, M., Heikkinen, R. K. & Thuiller, W. Evaluation of consensus methods in predictive species distribution modelling. Divers. Distrib. 59–69 (2019).
+
+\[8\] Bucklin, D. N. et al. Climate downscaling effects on predictive ecological models: a casestudy for threatened and endangered vertebrates in the southeastern United States. Reg. Environ. Change 1 3 , 57–68 (2013).
+
+\[9\] Claytonia virginica L. in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[10\] Erythronium umbilicatum C.R.Parks & Hardin in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[11\] Stellaria pubera Michx. in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[12\] Thalictrum thalictroides (L.) Eames & B.Boivin in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[13\] Cardamine angustata O.E.Schulz in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[14\] Hepatica americana (DC.) Ker-Gawl. in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[15\] Sanguinaria canadensis L. in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[16\] Tiarella cordifolia L. in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[17\] Aesculus sylvatica W.Bartram in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[18\] Viola papilionacea Pursh in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[19\] Uvularia sessilifolia L. in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[20\] Podophyllum peltatum L. in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[21\] Trillium catesbaei Elliott in GBIF Secretariat (2019). GBIF Backbone Taxonomy. Checklist dataset <https://doi.org/10.15468/39omei> accessed via GBIF.org on 2020-04-01.
+
+\[23\] Barbet-Massin, M., Jiguet F., Albert C. H., Thuiller W. Selecting pseudo‐absences for species distribution models: how, where and how many? Methods of Ecology and Evolution 3, 327 - 338 (2012)
+
+\[24\] Ghosh, S., Katkar, S. Modeling Uncertainty Resulting from Multiple Downscaling Methods in Assessing Hydrological Impacts of Climate Change. Water Resources Management 26. 559–3579 (2012)
+
+\[25\] Sunyer M. A., Madsen H., Ang P. H. A comparison of different regional climate models and statistical downscaling methods for extreme rainfall estimation under climate change. Atmospheric Research 103. 119 - 128. (2012)

@@ -1,11 +1,11 @@
 ---
 title: "Final Report"
 author: "Violet Lingenfelter"
-date: "4/23/2020"
-output: html_document
+date: "4/24/2020"
+output:
+  md_document:
+    variant: markdown_github
 ---
-<<<<<<< HEAD
-=======
 # Final Project 
 
 ## Background and Project Goals
@@ -21,46 +21,33 @@ This project closely follows the methodology laid out by Bascompte Lab's prior w
 Because this data is presence only, I created pseudo-absence data using an SRE model for each species [23]. I use the consensus method [6,7] with four distribution models from biomod2: generalized linear model, generalized boosting model, artificial neural network, and random forest. I will run 10 repetitions of each model. I will then project each species’ occurrence probabilities under current and future climate scenarios.
 
 This project was completed with R 3.6.3 on MacOS, using `rgbif` to collect species distribution data and `biomod2` for species distribution modeling. SDSM downscaling [2] was done with SDSM v 5.3. The BCSD downscaling method [3] was intended to be my other choice for comparison, but that proved not feasible given my time and computation constraints. I chose instead to perform a very primitive downscaling method using the `raster` package `dissagregate` function on raw climate data. To reference the code used for simple downscaling and species data downloads, see [the github repo](https://github.com/vlingenfelter/eemb5130).
->>>>>>> 0b7b12f... update to submitted project
 
 ```{r setup, include=FALSE}
-
 library(raster) # include library for reading raster files
-library(plotKML)
+library(rnaturalearth)
+library(biomod2) # include biomod2 for modeling
 ```
 
-<<<<<<< HEAD
-```{r}
-=======
 ## Get species distribution vector data
 
 This network was taken from the Web of Life database. All of the species distributions were gotten from GBIF.
 
 ```{r loadData}
->>>>>>> 0b7b12f... update to submitted project
 # get data
-network <- read.csv("./web-of-life/M_PL_025.csv")
-species <- read.csv("species.csv")
-
+network <- read.csv("./web-of-life/M_PL_025.csv") # the network data
+species <- read.csv("species.csv") # list of species names and associated hashes
 distributions <- vector(mode = "list", length = NROW(species)) # empty vector to hold the distributions
-rasters <- vector(mode = "list", length = NROW(species))
 
+# make each species csv into a SpatialPoints DataFrame
 for (i in 1:NROW(species)) {
   path <- toString(species$csv_path[i]) # get the download path
   df <- read.csv(file = path) # read the file
   df["X"] <- NULL # remove the extra column (just the row number)
   df <- unique(df) # keep only unique data points
-  df <- cbind(df, "count" = 1)
-  coordinates(df) <- cbind(df$decimalLongitude, df$decimalLatitude)
-  proj4string(df) = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+  df <- cbind(df, "count" = 1) # add a count value, this is for rasterizing
+  coordinates(df) <- cbind(df$decimalLongitude, df$decimalLatitude) # convert to a spatialpoints dataframe
+  proj4string(df) = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0") # assign a coordinate system
   
-<<<<<<< HEAD
-  r <- raster()
-  nrow(r) <- nrow(r)*8
-  ncol(r) <- ncol(r)*8
-  r <- rasterize(df, r, field="count", background=0)
-  r <-  crop(r, c(-180,0,0,90))
-=======
   distributions[[i]] <- df # add this to the list
 }
 ```
@@ -89,23 +76,27 @@ for (i in 1:NROW(species)) {
   print(paste("modeling", species$species[i]))
   myResp <- distributions[[i]]
   myRespXY <- cbind(myResp$decimalLongitude, myResp$decimalLatitude)
->>>>>>> 0b7b12f... update to submitted project
   
-  plot(r)
+  myResp <- 
+    raster::reclassify(
+      subset(explanatory, 1, drop = TRUE), c(-Inf, Inf, 0)
+    )
   
-  distributions[[i]] <- df # add this to the list
-  rasters[[i]] <- r
+  myResp[cellFromXY(myResp,myRespXY)] <- 1
+  
+  sre.095 <- 
+    sre(
+      Response = myResp, 
+      Explanatory = explanatory, 
+      NewData=explanatory, 
+      Quant = 0.025
+    )
+  
+  sre.095 <-  mask(sre.095, boundaries) # bounding box for contiguous north america
+  sre_output[[i]] <- sre.095 # store in list
 }
-
-<<<<<<< HEAD
-# add names to the list (species names with spaces replaced by underscores)
-names(distributions) <- lapply(species$species, function(y) {gsub(" ", "_", y)})
-names(rasters) <- lapply(species$species, function(y) {gsub(" ", "_", y)})
-
 ```
 
-
-=======
 #### Set up the data for modeling
 
 ```{r dataFormat}
@@ -249,4 +240,3 @@ Without high resolution climate data, species distribution models are not feasib
 [25] Sunyer M. A., Madsen H., Ang P. H. A comparison of different regional climate models and statistical downscaling methods for extreme rainfall estimation under climate change. Atmospheric Research 103. 119 - 128. (2012)
 
 
->>>>>>> 0b7b12f... update to submitted project
